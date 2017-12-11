@@ -52,7 +52,7 @@ windowLines=0
 #functions-----------------------------------------------------------
 
 function getThreadFreq() {
-    local freq
+	local freq
     freq=$(cat /sys/devices/system/cpu/cpu$1/cpufreq/scaling_cur_freq)
     freq=$(( freq / 1000 ))
     echo $freq
