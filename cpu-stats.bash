@@ -4,13 +4,14 @@
 # TODO: optional setup wizard
 # TODO: first run setup question
 # COMBAK: check threads order and arrange them by their core bond
-# IDEA: split this into multiple files
 
 #global variables-------------------------------------------------
 
+readonly config="$HOME/.config/cpu-stats.conf"
+
 readonly sleepTime='.5s'
-readonly clearOnExit=1
-readonly arrangeThreadsByCPUBond=1
+clearOnExit=0
+arrangeThreadsByCPUBond=0
 
 readonly cpuThreads=$(cat /proc/cpuinfo\
         | grep processor\
@@ -22,18 +23,17 @@ readonly fans=$(sensors\
         | grep fan\
         | wc -l)
 
-readonly frequencyTresholdLow=1200;
-readonly frequencyTresholdMedium=1800;
-readonly frequencyTresholdHigh=2500;
+frequencyTresholdLow=1200
+frequencyTresholdMedium=1800
+frequencyTresholdHigh=2500
 
-readonly tempTresholdLow=42;
-readonly tempTresholdMedium=50;
-readonly tempTresholdHigh=65;
+tempTresholdLow=42
+tempTresholdMedium=50
+tempTresholdHigh=65
 
-readonly fanTresholdLow=2700;
-readonly fanTresholdMedium=3200;
-#readonly fanTresholdHigh=0;
-
+fanTresholdLow=2700
+fanTresholdMedium=3200
+#fanTresholdHigh=4000
 
 #helper variables----------------------------------------------------
 
@@ -50,6 +50,57 @@ windowCols=0
 windowLines=0
 
 #functions-----------------------------------------------------------
+
+function readFile() {
+	echo $(cat $1 | \
+            grep "^[^#]" | \
+            grep $2 | \
+            awk 'NR==1{print $2}')
+}
+
+function readConfig() {
+    if [ -e $1 ]; then
+		clearOnExit=$(readFile $1 clearOnExit)
+		arrangeThreadsByCPUBond=$(readFile $1 arrangeThreadsByCPUBond)
+
+        frequencyTresholdLow=$(readFile $1 frequencyTresholdLow)
+        frequencyTresholdMedium=$(readFile $1 frequencyTresholdMedium)
+        frequencyTresholdHigh=$(readFile $1 frequencyTresholdHigh)
+
+        tempTresholdLow=$(readFile $1 temperatureTresholdLow)
+        tempTresholdMedium=$(readFile $1 temperatureTresholdMedium)
+        tempTresholdHigh=$(readFile $1 temperatureTresholdHigh)
+
+    	fanTresholdLow=$(readFile $1 fanTresholdLow)
+        fanTresholdMedium=$(readFile $1 fanTresholdHigh)
+        #fanTresholdHigh=$(readFile $1 frequencyTresholdLow)
+    else
+        cat > $1 <<-makeConfig
+			# cpu-stats config file
+
+			# fun options
+			clearOnExit true
+			arrangeThreadsByCPUBond false
+
+			# CPU frequency tresholds
+			frequencyTresholdLow	1200
+			frequencyTresholdMedium	1800
+			frequencyTresholdHigh	2500
+
+			# CPU temparature tresholds
+			temperatureTresholdLow		42
+			temperatureTresholdMedium	50
+			temperatureTresholdHigh		65
+
+			# Fan speeds thresholds
+			fanTresholdLow			2700
+			fanTresholdMedium		3200
+			fanTresholdHigh			4000
+		makeConfig
+    fi
+
+
+}
 
 function getThreadFreq() {
 	local freq
@@ -126,7 +177,7 @@ function printCpuSpeeds(){
 
 
     # TODO: Clean this mess up somehow. Low priority though :(
-    if [[ arrangeThreadsByCPUBond -eq 1 ]]; then
+    if [[ $arrangeThreadsByCPUBond == "true" ]]; then
         while [[ core -le cpuCores ]]; do
             for (( i = 0; i < $1; i++ )); do
                 coreBond=$(getCoreBond $i)
@@ -221,7 +272,7 @@ hideCursor() {
 
 unhideCursor() {
     printf '\e[?25h'
-    if [[ clearOnExit -eq 1 ]]; then
+    if [[ $clearOnExit == "true" ]]; then
         clear
     fi
 }
@@ -231,6 +282,8 @@ unhideCursor() {
 main() {
     trap unhideCursor EXIT
     hideCursor
+
+    readConfig $config
 
     while true; do
         detectWindowSizeChange
