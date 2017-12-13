@@ -1,6 +1,5 @@
 #!/usr/bin/bash
 
-# TODO: config file
 # TODO: optional setup wizard
 # TODO: first run setup question
 # COMBAK: check threads order and arrange them by their core bond
