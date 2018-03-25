@@ -8,19 +8,18 @@
 
 readonly config="$HOME/.config/cpu-stats.conf"
 
-readonly sleepTime='.5s'
+readonly sleepTime='1s'
 clearOnExit=0
 arrangeThreadsByCPUBond=0
 
-readonly cpuThreads=$(cat /proc/cpuinfo\
-        | grep processor\
-        | wc -l)
-readonly cpuCores=$(cat /proc/cpuinfo\
-        | grep "cpu cores"\
-        | awk 'FNR==1{print $4}')
-readonly fans=$(sensors\
-        | grep fan\
-        | wc -l)
+readonly cpuThreads=$(grep processor /proc/cpuinfo \
+	| wc -l)
+readonly cpuCores=$(grep "cpu cores" /proc/cpuinfo \
+	| cut -d " " -f 3 \
+	| head -n 1)
+readonly fans=$(sensors \
+	| grep fan \
+	| wc -l)
 
 frequencyTresholdLow=1200
 frequencyTresholdMedium=1800
@@ -47,14 +46,25 @@ readonly reset='\e[0;37m'
 outputBuffer="output goes here" #prevents flickering
 windowCols=0
 windowLines=0
+sensorsData="sensors command output goes here"
+cpuSpeeds="cpu speeds go here"
 
 #functions-----------------------------------------------------------
 
+function setupWizard() {
+	if [ -e $1 ]; then
+		clear
+	else
+		echo -e "$blue::$bold Do you want to start configuration wizard?$reset"
+		sleep 2s
+	fi
+}
+
 function readFile() {
-	echo $(cat $1 | \
-            grep "^[^#]" | \
-            grep $2 | \
-            awk 'NR==1{print $2}')
+	echo "$(cat $1 | \
+        grep "^[^#]" | \
+        grep $2 | \
+        awk 'NR==1{print $2}')"
 }
 
 function readConfig() {
@@ -97,28 +107,27 @@ function readConfig() {
 			fanTresholdHigh			4000
 		makeConfig
     fi
-
-
 }
 
 function getThreadFreq() {
 	local freq
-    freq=$(cat /sys/devices/system/cpu/cpu$1/cpufreq/scaling_cur_freq)
+	freq=$(( $1 + 1 ))
+    freq=$(echo "$cpuSpeeds" | sed -n "$freq,$freq p")
     freq=$(( freq / 1000 ))
     echo $freq
 }
 
 getCoreBond() {
-    echo $(cat /sys/devices/system/cpu/cpu$1/topology/core_id)
+    echo "$(cat /sys/devices/system/cpu/cpu$1/topology/core_id)"
 }
 
 function getCoreTemp() {
     local temp
-    temp=$(sensors | grep "Core $1" | awk '{print $3}')
+    temp=$(echo "$sensorsData" | grep "Core $1" | cut -d " " -f 10)
 
     local dot
     dot=${temp:3:1}
-    if [[ $dot == '.' ]]; then
+    if [[ "$dot" == "." ]]; then
         echo ${temp:1:2}
     else
         echo ${temp:1:3}
@@ -127,7 +136,7 @@ function getCoreTemp() {
 
 function getFanSpeed(){
     local fanSpeed
-    fanSpeed=$(sensors | grep fan1 | awk '{print $2}')
+    fanSpeed=$(echo "$sensorsData" | grep "fan1" | cut -d " " -f 9)
     echo $fanSpeed
 }
 
@@ -178,7 +187,7 @@ function printCpuSpeeds(){
     # TODO: Clean this mess up somehow. Low priority though :(
     if [[ $arrangeThreadsByCPUBond == "true" ]]; then
         while [[ core -le cpuCores ]]; do
-            for (( i = 0; i < $1; i++ )); do
+            for (( i = 0; i < $1; ++i )); do
                 coreBond=$(getCoreBond $i)
                 if [[ coreBond -eq core ]]; then
                     speed=$(getThreadFreq $i)
@@ -193,7 +202,7 @@ function printCpuSpeeds(){
             core=$(($core+1))
         done
     else
-        for (( i = 0; i < $1; i++ )); do
+        for (( i = 0; i < $1; ++i )); do
             speed=$(getThreadFreq $i)
             if [[ $speed -lt 1000 ]]; then
                 echo "Thread $magenta$i$reset: $(assignColor freq $speed)  MHz "
@@ -206,17 +215,19 @@ function printCpuSpeeds(){
 
 function printCpuTemps() {
     echo "${bold}Temperatures:${reset}"
-    for (( i = 0; i < $1; i++ )); do
-        echo "Core $magenta$i$reset: $(assignColor temp $(getCoreTemp $i))°C "
+	local coreTemp
+    for (( i = 0; i < $1; ++i )); do
+		coreTemp="$(getCoreTemp $i)"
+        echo "Core $magenta$i$reset: $(assignColor temp $coreTemp)°C "
     done
 }
 
 function printFanSpeeds() {
     echo "${bold}Fan speeds:${reset}"
     local speed
-    for (( i = 1; i <= $1; i++ )); do
+    for (( i = 1; i <= $1; ++i )); do
         speed=$(getFanSpeed $i)
-        if [[ $speed -ne "off" ]]; then
+        if [[ $speed != "off" ]]; then
             echo "Fan $magenta$i$reset: $(assignColor fan $speed) RPM "
         else
             echo "Fan $magenta$i$reset: $(assignColor fan $speed)     "
@@ -233,7 +244,7 @@ addToBuffer() {
 }
 
 displayBuffer(){
-    printf "${outputBuffer}\n"
+    echo -e "$outputBuffer"
 }
 
 detectWindowSizeChange() {
@@ -282,10 +293,13 @@ main() {
     trap unhideCursor EXIT
     hideCursor
 
+	setupWizard $config
     readConfig $config
 
     while true; do
         detectWindowSizeChange
+		sensorsData=$(sensors)
+		cpuSpeeds=$(cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq)
 
         clearBuffer
         addToBuffer "$(printCpuSpeeds $cpuThreads)\n\n"
