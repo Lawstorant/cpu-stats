@@ -8,7 +8,7 @@
 
 readonly config="$HOME/.config/cpu-stats.conf"
 
-readonly sleepTime='1s'
+sleepTime='1s'
 clearOnExit=0
 arrangeThreadsByCPUBond=0
 
@@ -21,6 +21,9 @@ readonly fans=$(sensors \
 	| grep fan \
 	| wc -l)
 fanPath="placeholder"
+showCoreSpeeds="true"
+showTemps="true"
+showFanSpeeds="true"
 
 frequencyTresholdLow=1200
 frequencyTresholdMedium=1800
@@ -86,6 +89,11 @@ function readConfig() {
     if [ -e $1 ]; then
 		clearOnExit=$(readFile $1 clearOnExit)
 		arrangeThreadsByCPUBond=$(readFile $1 arrangeThreadsByCPUBond)
+		sleepTime=$(readFile $1 refreshTime)'s'
+
+		showCoreSpeeds=$(readFile $1 showCoreSpeeds)
+		showTemps=$(readFile $1 showTemps)
+		showFanSpeeds=$(readFile $1 showFanSpeeds)
 
         frequencyTresholdLow=$(readFile $1 frequencyTresholdLow)
         frequencyTresholdMedium=$(readFile $1 frequencyTresholdMedium)
@@ -105,6 +113,16 @@ function readConfig() {
 			# fun options
 			clearOnExit true
 			arrangeThreadsByCPUBond false
+
+			# refresh time in seconds
+			# supports fractions eg. .3
+			refreshTime 1
+
+			# enable/disable stats
+			showCoreSpeeds	true
+			showTemps		true
+			showFanSpeeds	true
+
 
 			# CPU frequency tresholds
 			frequencyTresholdLow	1200
@@ -135,13 +153,7 @@ function getThreadFreq() {
 getCoreBond() {
     echo "$(cat /sys/devices/system/cpu/cpu$1/topology/core_id)"
 }
-readonly fans=$(sensors \
-	| grep fan \
-	| wc -l)
-fanPath="placeholder"
 
-frequencyTresholdLow=1200
-frequencyTresholdMedium=1800
 function getCoreTemp() {
     local temp
     temp=$(echo "$sensorsData" | grep "Core $1" | cut -d " " -f 10)
@@ -240,7 +252,7 @@ function printFanSpeeds() {
     local speed
     for (( i = 1; i <= $1; ++i )); do
         speed=$(getFanSpeed $i)
-        if [[ $speed != "off" ]]; then
+        if [[ $speed -ne 0 ]]; then
             echo "Fan $magenta$i$reset: $(assignColor fan $speed) RPM      "
         else
             echo "Fan $magenta$i$reset: $(assignColor fan $speed)          "
@@ -320,9 +332,15 @@ main() {
 		cpuSpeeds=$(cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq)
 
         clearBuffer
-        addToBuffer "$(printCpuSpeeds $cpuThreads)\n\n"
-        addToBuffer "$(printCpuTemps $cpuCores)\n\n"
-        addToBuffer "$(printFanSpeeds $fans)"
+		if [[ $showCoreSpeeds == "true" ]]; then
+			addToBuffer "$(printCpuSpeeds $cpuThreads)\n\n"
+		fi
+		if [[ $showTemps == "true" ]]; then
+			addToBuffer "$(printCpuTemps $cpuCores)\n\n"
+		fi
+		if [[ $showFanSpeeds == "true" ]]; then
+			addToBuffer "$(printFanSpeeds $fans)"
+		fi
         moveCursorTo00
         displayBuffer
         sleep $sleepTime
