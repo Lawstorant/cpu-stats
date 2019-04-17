@@ -136,7 +136,7 @@ function getCoreTemp() {
 
 function getFanSpeed(){
     local fanSpeed
-    fanSpeed=$(echo "$sensorsData" | grep "fan1" | cut -d " " -f 9)
+    fanSpeed=$(echo "$sensorsData" | grep "fan$1" | cut -d " " -f 9)
     echo $fanSpeed
 }
 
