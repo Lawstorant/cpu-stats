@@ -20,6 +20,7 @@ readonly cpuCores=$(grep "cpu cores" /proc/cpuinfo \
 readonly fans=$(sensors \
 	| grep fan \
 	| wc -l)
+fanPath="placeholder"
 
 frequencyTresholdLow=1200
 frequencyTresholdMedium=1800
@@ -50,6 +51,20 @@ sensorsData="sensors command output goes here"
 cpuSpeeds="cpu speeds go here"
 
 #functions-----------------------------------------------------------
+
+function findFans() {
+	local monNum
+	local fanNumber
+	monNum=$(ls -l /sys/class/hwmon | wc -l)
+
+	for (( i = 0; i < monNum; ++i )); do
+		fanNumber=$(find /sys/class/hwmon/hwmon$i/ -name "fan*_input" -print | wc -l)
+		if [[ $fanNumber -eq $fans ]]; then
+			fanPath="/sys/class/hwmon/hwmon$i/"
+			break
+		fi
+	done
+}
 
 function setupWizard() {
 	if [ -e $1 ]; then
@@ -120,7 +135,13 @@ function getThreadFreq() {
 getCoreBond() {
     echo "$(cat /sys/devices/system/cpu/cpu$1/topology/core_id)"
 }
+readonly fans=$(sensors \
+	| grep fan \
+	| wc -l)
+fanPath="placeholder"
 
+frequencyTresholdLow=1200
+frequencyTresholdMedium=1800
 function getCoreTemp() {
     local temp
     temp=$(echo "$sensorsData" | grep "Core $1" | cut -d " " -f 10)
@@ -136,7 +157,7 @@ function getCoreTemp() {
 
 function getFanSpeed(){
     local fanSpeed
-    fanSpeed=$(echo "$sensorsData" | grep "fan$1" | cut -d " " -f 9)
+	fanSpeed=$(cat "$fanPath/fan$1_input")
     echo $fanSpeed
 }
 
@@ -191,11 +212,7 @@ function printCpuSpeeds(){
                 coreBond=$(getCoreBond $i)
                 if [[ coreBond -eq core ]]; then
                     speed=$(getThreadFreq $i)
-                    if [[ $speed -lt 1000 ]]; then
-                        echo "Thread $magenta$i$reset: $(assignColor freq $speed)  MHz "
-                    else
-                        echo "Thread $magenta$i$reset: $(assignColor freq $speed) MHz  "
-                    fi
+                    echo "Thread $magenta$i$reset: $(assignColor freq $speed) MHz      "
                 fi
             done
             echo ""
@@ -204,11 +221,7 @@ function printCpuSpeeds(){
     else
         for (( i = 0; i < $1; ++i )); do
             speed=$(getThreadFreq $i)
-            if [[ $speed -lt 1000 ]]; then
-                echo "Thread $magenta$i$reset: $(assignColor freq $speed)  MHz "
-            else
-                echo "Thread $magenta$i$reset: $(assignColor freq $speed) MHz  "
-            fi
+			echo "Thread $magenta$i$reset: $(assignColor freq $speed) MHz      "
         done
     fi
 }
@@ -228,9 +241,9 @@ function printFanSpeeds() {
     for (( i = 1; i <= $1; ++i )); do
         speed=$(getFanSpeed $i)
         if [[ $speed != "off" ]]; then
-            echo "Fan $magenta$i$reset: $(assignColor fan $speed) RPM "
+            echo "Fan $magenta$i$reset: $(assignColor fan $speed) RPM      "
         else
-            echo "Fan $magenta$i$reset: $(assignColor fan $speed)     "
+            echo "Fan $magenta$i$reset: $(assignColor fan $speed)          "
         fi
     done
 }
@@ -293,8 +306,13 @@ main() {
     trap unhideCursor EXIT
     hideCursor
 
-	setupWizard $config
+	if [[ $1 == "debug" ]]; then
+		local testConfig
+		testConfig="$HOME/.config/cpu-stats-test.conf"
+        setupWizard $testConfig
+    fi
     readConfig $config
+	findFans
 
     while true; do
         detectWindowSizeChange
@@ -311,4 +329,4 @@ main() {
     done
 }
 
-main
+main $1
